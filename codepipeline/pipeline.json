@@ -1,0 +1,126 @@
+{
+  "pipeline": {
+    "name": "app-deployment-pipeline",
+    "roleArn": "arn:aws:iam::YOUR_ACCOUNT_ID:role/CodePipelineRole",
+    "artifactStore": {
+      "type": "S3",
+      "location": "your-codepipeline-artifacts-bucket"
+    },
+    "stages": [
+      {
+        "name": "Source",
+        "actions": [
+          {
+            "name": "GitHub_Source",
+            "actionTypeId": {
+              "category": "Source",
+              "owner": "ThirdParty",
+              "provider": "GitHub",
+              "version": "1"
+            },
+            "configuration": {
+              "Owner": "your-github-username",
+              "Repo": "cicd-pipeline-aws",
+              "Branch": "main",
+              "OAuthToken": "{{resolve:secretsmanager:github-token}}"
+            },
+            "outputArtifacts": [
+              { "name": "SourceOutput" }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Build",
+        "actions": [
+          {
+            "name": "CodeBuild_Docker",
+            "actionTypeId": {
+              "category": "Build",
+              "owner": "AWS",
+              "provider": "CodeBuild",
+              "version": "1"
+            },
+            "configuration": {
+              "ProjectName": "app-docker-build"
+            },
+            "inputArtifacts": [
+              { "name": "SourceOutput" }
+            ],
+            "outputArtifacts": [
+              { "name": "BuildOutput" }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Deploy_Dev",
+        "actions": [
+          {
+            "name": "ECS_Deploy_Dev",
+            "actionTypeId": {
+              "category": "Deploy",
+              "owner": "AWS",
+              "provider": "CodeDeployToECS",
+              "version": "1"
+            },
+            "configuration": {
+              "ApplicationName": "app-codedeploy",
+              "DeploymentGroupName": "app-dev-deployment-group",
+              "TaskDefinitionTemplateArtifact": "BuildOutput",
+              "AppSpecTemplateArtifact": "BuildOutput",
+              "Image1ArtifactName": "BuildOutput",
+              "Image1ContainerName": "IMAGE1_NAME"
+            },
+            "inputArtifacts": [
+              { "name": "BuildOutput" }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Approval_To_Prod",
+        "actions": [
+          {
+            "name": "Manual_Approval",
+            "actionTypeId": {
+              "category": "Approval",
+              "owner": "AWS",
+              "provider": "Manual",
+              "version": "1"
+            },
+            "configuration": {
+              "NotificationArn": "arn:aws:sns:us-east-1:YOUR_ACCOUNT_ID:pipeline-approvals",
+              "CustomData": "Approve deployment to PROD?"
+            }
+          }
+        ]
+      },
+      {
+        "name": "Deploy_Prod",
+        "actions": [
+          {
+            "name": "ECS_Deploy_Prod",
+            "actionTypeId": {
+              "category": "Deploy",
+              "owner": "AWS",
+              "provider": "CodeDeployToECS",
+              "version": "1"
+            },
+            "configuration": {
+              "ApplicationName": "app-codedeploy",
+              "DeploymentGroupName": "app-prod-deployment-group",
+              "TaskDefinitionTemplateArtifact": "BuildOutput",
+              "AppSpecTemplateArtifact": "BuildOutput",
+              "Image1ArtifactName": "BuildOutput",
+              "Image1ContainerName": "IMAGE1_NAME"
+            },
+            "inputArtifacts": [
+              { "name": "BuildOutput" }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
